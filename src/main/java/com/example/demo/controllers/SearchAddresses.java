@@ -23,7 +23,11 @@ public class SearchAddresses {
     @Value("${spring.geoborder}")
     private String geoborder;
 
-    private final String NOMINATION_SERVER_URL = "http://localhost:8003";
+    @Value("${services.nominatim.url:http://localhost:8003}")
+    private String nominatimServerUrl;
+
+    @Value("${services.valhalla.url:http://localhost:8002}")
+    private String valhallaServerUrl;
     private final RestTemplate restTemplate = new RestTemplate();
 
     @PostMapping("/api/geo/**")
@@ -60,9 +64,9 @@ public class SearchAddresses {
                     .body("Ошибка ввода");
         }
 
-        String nominationUrlFrom = NOMINATION_SERVER_URL + "/search?viewbox=" + geoborder + "&format=jsonv2&q="
+        String nominationUrlFrom = nominatimServerUrl + "/search?viewbox=" + geoborder + "&format=jsonv2&q="
                 + fromAddress + "&bounded=1";
-        String nominationUrlTo = NOMINATION_SERVER_URL + "/search?viewbox=" + geoborder + "&format=jsonv2&q="
+        String nominationUrlTo = nominatimServerUrl + "/search?viewbox=" + geoborder + "&format=jsonv2&q="
                 + toAddress + "&bounded=1";
         //System.out.print(nominationUrl);
         try {
@@ -95,8 +99,6 @@ public class SearchAddresses {
             //
             // System.out.print(toLat);
 
-            //String routeGetPolylines = "http://localhost:8002/optimized_route";
-
             String dataRoute = String.format(
                     "{\"locations\":[{\"lat\":%s,\"lon\":%s},{\"lat\":%s,\"lon\":%s}],\"costing\":\"auto\",\"units\":\"kilometers\",\"shape_format\":\"polyline5\"}",
                     fromLat, fromLon, toLat, toLon
@@ -108,7 +110,7 @@ public class SearchAddresses {
             HttpEntity<String> entity = new HttpEntity<>(dataRoute, headers);
 
             String routeResponse = restTemplate.postForObject(
-                    "http://localhost:8002/optimized_route",
+                    valhallaServerUrl + "/optimized_route",
                     entity,
                     String.class
             );

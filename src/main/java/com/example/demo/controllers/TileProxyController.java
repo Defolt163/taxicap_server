@@ -1,6 +1,7 @@
 package com.example.demo.controllers;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -18,7 +19,8 @@ public class TileProxyController {
     @Autowired
     private JwtValidator jwtValidator;
 
-    private final String TILE_SERVER_URL = "http://localhost:8001";
+    @Value("${services.tiles.url:http://localhost:8001}")
+    private String tileServerUrl;
     private final RestTemplate restTemplate = new RestTemplate();
 
     @GetMapping("/tile/**")
@@ -45,7 +47,7 @@ public class TileProxyController {
         // 3. Формируем запрос к тайловому серверу
         String requestPath = request.getRequestURI();
         String tilePath = requestPath.substring("/tile".length());
-        String tileUrl = TILE_SERVER_URL + "/tile" + tilePath;
+        String tileUrl = tileServerUrl + "/tile" + tilePath;
         //System.out.println("🔍 Tile path: " + tilePath);
 
         try {
