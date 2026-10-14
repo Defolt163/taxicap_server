@@ -56,8 +56,10 @@ public class SearchAddresses {
         String fromAddress = requestBody.get("from");
         String toAddress = requestBody.get("to");
 
-//        System.out.println("From: " + fromAddress);
-//        System.out.println("To: " + toAddress);
+        
+
+        //System.out.println("From: " + fromAddress);
+        //System.out.println("To: " + toAddress);
 
         if (fromAddress == null || toAddress == null) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -68,7 +70,7 @@ public class SearchAddresses {
                 + fromAddress + "&bounded=1";
         String nominationUrlTo = nominatimServerUrl + "/search?viewbox=" + geoborder + "&format=jsonv2&q="
                 + toAddress + "&bounded=1";
-        //System.out.print(nominationUrl);
+        //System.out.print(nominationUrlFrom);
         try {
             ObjectMapper mapper = new ObjectMapper();
 
@@ -130,6 +132,9 @@ public class SearchAddresses {
             double timeSec = root.path("trip").path("summary").path("time").asDouble();
             double lengthKm = root.path("trip").path("summary").path("length").asDouble();
 
+            double pricePerKm = 120.48;
+            double pickupPrice = 50;
+            double fixPrice = 150;
             // Формируем ответ
             Map<String, Object> result = new HashMap<>();
             result.put("shape", shape);
@@ -137,7 +142,7 @@ public class SearchAddresses {
             result.put("time_minutes", Math.round(timeSec / 60 * 10) / 10.0);
             result.put("length_km", lengthKm);
             result.put("length_meters", Math.round(lengthKm * 1000));
-            result.put("price", Math.round((lengthKm * 1000) * 0.045 + 45));
+            result.put("price", lengthKm <= 1.3 ? fixPrice : (Math.round(((lengthKm * 40 + fixPrice) - 52)  / 10) * 10));
 
             return ResponseEntity.ok(result);
 
