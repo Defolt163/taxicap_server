@@ -15,7 +15,7 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
 
 	List<Order> findByUserIdAndOrderStatusIn(Integer userId, List<String> statuses);
 
-	@Modifying
+	@Modifying(clearAutomatically = true, flushAutomatically = true)
 	@Query("update Order o set o.orderStatus = 'active' where o.id = :orderId and o.orderStatus = 'created'")
 	int claimCreatedOrder(@Param("orderId") Integer orderId);
 }

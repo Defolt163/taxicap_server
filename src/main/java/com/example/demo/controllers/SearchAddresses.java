@@ -33,7 +33,7 @@ public class SearchAddresses {
     @PostMapping("/api/geo/**")
     public ResponseEntity<?> processRequestBody(
             @RequestHeader(value = "Authorization", required = false) String authHeader,
-            @RequestBody Map<String, String> requestBody) {
+            @RequestBody RouteRequest requestBody) {
 
         // 1. Проверяем наличие заголовка
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
@@ -53,13 +53,26 @@ public class SearchAddresses {
 
         // 3. Получаем адрес из body
 
-        String fromAddress = requestBody.get("from");
-        String toAddress = requestBody.get("to");
+        String fromAddress = requestBody.from;
+        String toAddress = requestBody.to;
 
-        
+        RouteRequest.Coords fromCoordinates = requestBody.coordsFrom;
+        RouteRequest.Coords toCoordinates = requestBody.coordsTo;
 
-        //System.out.println("From: " + fromAddress);
-        //System.out.println("To: " + toAddress);
+        System.out.println("From: " + fromAddress);
+        System.out.println("To: " + toAddress);
+
+        if (fromCoordinates != null) {
+            System.out.println("Coord From: " + fromCoordinates.lat + ", " + fromCoordinates.lon);
+        } else {
+            System.out.println("Coord From: null");
+        }
+
+        if (toCoordinates != null) {
+            System.out.println("Coord To: " + toCoordinates.lat + ", " + toCoordinates.lon);
+        } else {
+            System.out.println("Coord To: null");
+        }
 
         if (fromAddress == null || toAddress == null) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -73,30 +86,48 @@ public class SearchAddresses {
         //System.out.print(nominationUrlFrom);
         try {
             ObjectMapper mapper = new ObjectMapper();
+            String fromLat;
+            String fromLon;
+            if(fromCoordinates != null){
+                fromLat = fromCoordinates.lat.toString();
+                fromLon = fromCoordinates.lon.toString();
+                System.out.println("ОТ Запрос без номинатима");
+            }else{
+                String responseFrom = restTemplate.getForObject(nominationUrlFrom, String.class);
+                JsonNode[] resultsFrom = mapper.readValue(responseFrom, JsonNode[].class);
 
-            String responseFrom = restTemplate.getForObject(nominationUrlFrom, String.class);
-            JsonNode[] resultsFrom = mapper.readValue(responseFrom, JsonNode[].class);
+                if (resultsFrom.length == 0) {
+                    return ResponseEntity.badRequest().body("Адрес отправления не найден");
+                }
 
-            if (resultsFrom.length == 0) {
-                return ResponseEntity.badRequest().body("Адрес отправления не найден");
+                fromLat = resultsFrom[0].get("lat").toString();
+                fromLon = resultsFrom[0].get("lon").toString();
+                System.out.println("ОТ Запрос с номинатимом");
             }
-
-            String fromLat = resultsFrom[0].get("lat").asText();
-            String fromLon = resultsFrom[0].get("lon").asText();
 
             // Задержка в 1 секунду (согласно политике Nominatim)
             Thread.sleep(1000);
 
             // Получаем координаты TO
-            String responseTo = restTemplate.getForObject(nominationUrlTo, String.class);
-            JsonNode[] resultsTo = mapper.readValue(responseTo, JsonNode[].class);
+            String toLat;
+            String toLon;
+            if(toCoordinates != null){
+                toLat = toCoordinates.lat.toString();
+                toLon = toCoordinates.lon.toString();
+                System.out.println(toLon);
+            }else{
+                String responseTo = restTemplate.getForObject(nominationUrlTo, String.class);
+                JsonNode[] resultsTo = mapper.readValue(responseTo, JsonNode[].class);
 
-            if (resultsTo.length == 0) {
-                return ResponseEntity.badRequest().body("Адрес назначения не найден, или находится вне зоны действия приложения");
+                if (resultsTo.length == 0) {
+                    return ResponseEntity.badRequest().body("Адрес назначения не найден, или находится вне зоны действия приложения");
+                }
+
+                toLat = resultsTo[0].get("lat").toString();
+                toLon = resultsTo[0].get("lon").toString();
+                System.out.println("Куда Запрос с номинатимом");
             }
-
-            String toLat = resultsTo[0].get("lat").asText();
-            String toLon = resultsTo[0].get("lon").asText();
+            
 
             //
             // System.out.print(toLat);
@@ -134,7 +165,7 @@ public class SearchAddresses {
 
             double pricePerKm = 120.48;
             double pickupPrice = 50;
-            double fixPrice = 150;
+            double fixPrice = 79;
             // Формируем ответ
             Map<String, Object> result = new HashMap<>();
             result.put("shape", shape);
@@ -142,7 +173,7 @@ public class SearchAddresses {
             result.put("time_minutes", Math.round(timeSec / 60 * 10) / 10.0);
             result.put("length_km", lengthKm);
             result.put("length_meters", Math.round(lengthKm * 1000));
-            result.put("price", lengthKm <= 1.3 ? fixPrice : (Math.round(((lengthKm * 40 + fixPrice) - 52)  / 10) * 10));
+            result.put("price", lengthKm <= 1.3 ? fixPrice : (Math.round(((lengthKm * 13 + fixPrice) - 13)  / 10) * 10));
 
             return ResponseEntity.ok(result);
 

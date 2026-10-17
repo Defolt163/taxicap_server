@@ -18,8 +18,13 @@ import com.example.demo.WebSocket.dto.LocationDto;
 import com.example.demo.WebSocket.dto.OrderDto;
 import com.example.demo.WebSocket.entity.Account;
 import com.example.demo.WebSocket.entity.Order;
+import com.example.demo.WebSocket.exceptions.OrderUnavailableException;
 import com.example.demo.WebSocket.repository.AccountRepository;
 import com.example.demo.WebSocket.repository.OrderRepository;
+
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+//import com.example.demo.WebSocket.exceptions.OrderUnavailableException;
 
 import lombok.RequiredArgsConstructor;
 
@@ -85,7 +90,7 @@ public class OrderService {
                 .orElseThrow(() -> new RuntimeException("Водитель не найден"));
 
         if (orderRepository.claimCreatedOrder(orderId) != 1) {
-            throw new IllegalStateException("Заказ уже принят или недоступен");
+            throw new OrderUnavailableException(orderId);
         }
 
         Order order = orderRepository.findById(orderId)
@@ -99,13 +104,25 @@ public class OrderService {
         order.setVehicleNumber(driver.getVehicleNumber());
         order.setDriverImage(driver.getUserImage());
         orderRepository.save(order);
-        accountRepository.save(driver);
         orderTimeoutService.stopTimer(orderId);
 
-        messagingTemplate.convertAndSend("/topic/orderAccepted", orderId);
-        messagingTemplate.convertAndSendToUser(order.getUserId().toString(), "/queue/orderAccepted", order);
-        messagingTemplate.convertAndSendToUser(driverId.toString(), "/queue/orderAccepted", order);
-        sendPush(List.of(order.getUserId()), List.of(), "Водитель найден", "Водитель принял ваш заказ", orderId);
+        afterCommit(() -> {
+            messagingTemplate.convertAndSend("/topic/orderAccepted", orderId);
+            messagingTemplate.convertAndSendToUser(order.getUserId().toString(), "/queue/orderAccepted", order);
+            messagingTemplate.convertAndSendToUser(driverId.toString(), "/queue/orderAccepted", order);
+            sendPush(List.of(order.getUserId()), List.of(), "Водитель найден", "Водитель принял ваш заказ", orderId);
+        });
+    }
+
+    private void afterCommit(Runnable action) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() { action.run(); }
+            });
+        } else {
+            action.run();
+        }
     }
 
     public void workOrder(Integer orderId) {

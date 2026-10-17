@@ -13,6 +13,10 @@ import com.example.demo.WebSocket.dto.OrderDto;
 import com.example.demo.WebSocket.services.DriverPresenceService;
 import com.example.demo.WebSocket.services.OrderService;
 
+import org.springframework.messaging.handler.annotation.MessageExceptionHandler;
+import org.springframework.messaging.simp.annotation.SendToUser;
+import com.example.demo.WebSocket.exceptions.OrderUnavailableException;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -102,5 +106,18 @@ public class WebSocketController {
                               Principal principal) {
 
         log.info("🟢 User {} joined room {}", principal.getName(), orderId);
+    }
+
+    @MessageExceptionHandler(OrderUnavailableException.class)
+    @SendToUser("/queue/orderAcceptFailed")
+    public Integer handleOrderUnavailable(OrderUnavailableException e) {
+        return e.getOrderId();
+    }
+
+    @MessageExceptionHandler
+    @SendToUser("/queue/errors")
+    public String handleError(Exception e) {
+        log.warn("WS error: {}", e.getMessage());
+        return e.getMessage();
     }
 }
