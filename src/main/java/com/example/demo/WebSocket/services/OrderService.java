@@ -21,6 +21,7 @@ import com.example.demo.WebSocket.entity.Order;
 import com.example.demo.WebSocket.exceptions.OrderUnavailableException;
 import com.example.demo.WebSocket.repository.AccountRepository;
 import com.example.demo.WebSocket.repository.OrderRepository;
+import com.example.demo.pricing.QuoteService;
 
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -37,7 +38,12 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final OrderTimeoutService orderTimeoutService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final QuoteService quoteService;
     private final RestTemplate restTemplate = new RestTemplate();
+
+    // Комиссия агрегатора в процентах. 0 — работаем без комиссии.
+    @Value("${orders.commission-percent:0}")
+    private int commissionPercent;
 
     @Value("${push.notify-url:http://localhost:3000/api/push/notify}")
     private String pushNotifyUrl;
@@ -54,6 +60,21 @@ public class OrderService {
                 throw new IllegalStateException("У пассажира уже есть незавершённый заказ");
             }
 
+            // Цену и километры берём только из котировки, посчитанной на сервере.
+            // Значения из dto (price, routeDistanceKm) клиент может подменить.
+            QuoteService.Quote quote = quoteService.find(dto.getQuoteId());
+            if (quote == null) {
+                throw new IllegalStateException("Стоимость поездки устарела, постройте маршрут заново");
+            }
+
+            int price = quote.price();
+            double lengthKm = quote.lengthKm();
+            String encodedWay = quote.shape() != null && !quote.shape().isBlank()
+                    ? quote.shape()
+                    : dto.getEncodedWay();
+
+            int commissionAmount = (int) Math.round(price * commissionPercent / 100.0);
+
             Order order = new Order();
             order.setCustomerPhone(Long.parseLong(dto.getCustomerPhone()));
             order.setUserId(passengerId);
@@ -65,12 +86,15 @@ public class OrderService {
             order.setLonTo(String.valueOf(dto.getLonTo()));
             order.setAddressFrom(dto.getAddressFrom());
             order.setAddressTo(dto.getAddressTo());
-            order.setPrice(dto.getPrice().intValue());
+            order.setPrice(price);
             order.setPaymentMethod(dto.getPaymentMethod() != null ? dto.getPaymentMethod() : "Наличные");
             order.setCustomerImage(dto.getCustomerImage());
-            order.setEncodedWay(dto.getEncodedWay());
-            order.setRouteDistanceMeters(dto.getRouteDistanceMeters());
-            order.setRouteDistanceKm(dto.getRouteDistanceKm());
+            order.setEncodedWay(encodedWay);
+            order.setRouteDistanceMeters(String.valueOf(Math.round(lengthKm * 1000)));
+            order.setRouteDistanceKm(String.valueOf(lengthKm));
+            order.setCommissionPercent(commissionPercent);
+            order.setCommissionAmount(commissionAmount);
+            order.setDriverEarnings(price - commissionAmount);
 
             Order saved = orderRepository.save(order);
             orderTimeoutService.startTimer(saved.getId());
@@ -79,7 +103,9 @@ public class OrderService {
             sendPush(List.of(), List.of(1), "Новый заказ", "Появился новый заказ пассажира", saved.getId());
             return saved;
         } catch (Exception e) {
-            System.out.print("❌ Order creation failed");
+            System.out.println("❌ Order creation failed: " + e.getMessage());
+            messagingTemplate.convertAndSendToUser(userId, "/queue/errors",
+                    "Не удалось создать заказ: " + e.getMessage());
             return null;
         }
     }

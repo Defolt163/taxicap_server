@@ -18,6 +18,7 @@ public class OrderDto {
     private String addressFrom;
     private String addressTo;
     private BigDecimal price;
+    private String quoteId;
     private String paymentMethod;
     private String customerImage;
     private String encodedWay;

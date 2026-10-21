@@ -89,4 +89,13 @@ public class Order {
 
     @Column(name = "routeDistanceKm")
     private String routeDistanceKm;
+
+    @Column(name = "commissionPercent")
+    private Integer commissionPercent;
+
+    @Column(name = "commissionAmount")
+    private Integer commissionAmount;
+
+    @Column(name = "driverEarnings")
+    private Integer driverEarnings;
 }

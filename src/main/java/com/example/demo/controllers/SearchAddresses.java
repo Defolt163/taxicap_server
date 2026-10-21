@@ -9,6 +9,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import com.example.demo.pricing.QuoteService;
+import com.example.demo.pricing.TariffService;
+
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -19,6 +22,12 @@ import java.util.Map;
 public class SearchAddresses {
     @Autowired
     private JwtValidator jwtValidator;
+
+    @Autowired
+    private TariffService tariffService;
+
+    @Autowired
+    private QuoteService quoteService;
 
     @Value("${spring.geoborder}")
     private String geoborder;
@@ -163,9 +172,16 @@ public class SearchAddresses {
             double timeSec = root.path("trip").path("summary").path("time").asDouble();
             double lengthKm = root.path("trip").path("summary").path("length").asDouble();
 
-            double pricePerKm = 120.48;
-            double pickupPrice = 50;
-            double fixPrice = 79;
+            // Считаем стоимость на сервере и фиксируем её в котировке.
+            // Клиент получит только quote_id — цену и километры он подменить не сможет.
+            boolean outOfZone = tariffService.isOutsideServiceArea(
+                    parseCoordinate(toLat),
+                    parseCoordinate(toLon)
+            );
+            int price = tariffService.calculate(lengthKm, outOfZone);
+
+            String quoteId = quoteService.create(price, lengthKm, shape);
+
             // Формируем ответ
             Map<String, Object> result = new HashMap<>();
             result.put("shape", shape);
@@ -173,16 +189,21 @@ public class SearchAddresses {
             result.put("time_minutes", Math.round(timeSec / 60 * 10) / 10.0);
             result.put("length_km", lengthKm);
             result.put("length_meters", Math.round(lengthKm * 1000));
-            result.put("price", lengthKm <= 1.3 ? fixPrice : (Math.round(((lengthKm * 13 + fixPrice) - 13)  / 10) * 10));
+            result.put("price", price);
+            result.put("quote_id", quoteId);
 
             return ResponseEntity.ok(result);
 
             //return ResponseEntity.ok(routeResponse);
 
         } catch (Exception e) {
+            System.out.println("❌ Route calculation failed: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(("Ошибка определения маршрута. Проверьте адрес"));
         }
     }
 
+    private static double parseCoordinate(String value) {
+        return Double.parseDouble(value.replace("\"", "").trim());
+    }
 }
